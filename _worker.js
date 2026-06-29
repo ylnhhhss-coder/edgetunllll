@@ -1,538 +1,614 @@
-import { connect as 连接 } from 'cloudflare:sockets';
-// 兼容日期2026.1.20
-const 基础64文本解码器 = new TextDecoder();
-function 解码64(文本) {
-  const 二进制 = atob(文本);
-  const 字节 = new Uint8Array(二进制.length);
-  for (let 索引 = 0; 索引 < 二进制.length; 索引++) 字节[索引] = 二进制.charCodeAt(索引);
-  return 基础64文本解码器.decode(字节);
-}
-
-const 错误_无效数据 = 解码64('aW52YWxpZCBkYXRh');
-const 错误_无效用户 = 解码64('aW52YWxpZCB1c2Vy');
-const 错误_不支持命令 = 解码64('Y29tbWFuZCBpcyBub3Qgc3VwcG9ydGVk');
-const 错误_仅支持DNS_UDP = 解码64('VURQIHByb3h5IG9ubHkgZW5hYmxlIGZvciBETlMgd2hpY2ggaXMgcG9ydCA1Mw==');
-const 错误_无效地址类型 = 解码64('aW52YWxpZCBhZGRyZXNzVHlwZQ==');
-const 错误_空地址 = 解码64('YWRkcmVzc1ZhbHVlIGlzIGVtcHR5');
-const 错误_无效标识字符串 = 解码64('U3RyaW5naWZpZWQgaWRlbnRpZmllciBpcyBpbnZhbGlk');
-const 错误_SOCKS格式无效 = 解码64('SW52YWxpZCBTT0NLUyBhZGRyZXNzIGZvcm1hdA==');
-const 错误_SOCKS认证缺失 = 解码64('cGxlYXNlIHByb3ZpZGUgdXNlcm5hbWUvcGFzc3dvcmQ=');
-
-const 日志_流关闭 = 解码64('c3RyZWFtIGNsb3NlZA==');
-const 日志_流中止 = 解码64('c3RyZWFtIGFib3J0');
-const 日志_管道错误 = 解码64('c3RyZWF0IHBpcGUgZXJyb3I=');
-const 日志_连接成功 = 解码64('Y29ubmVjdGVk');
-const 日志_重试错误 = 解码64('cmV0cnkgZXJy');
-const 日志_关闭错误 = 解码64('Y2xvc2UgZXJy');
-const 日志_远程关闭 = 解码64('cmVtb3RlIGNsb3NlLCBkYXRhOg==');
-const 日志_远程中止 = 解码64('cmVtb3RlIGFib3J0');
-const 日志_传输错误 = 解码64('dHJhbnNmZXIgZXJyb3I=');
-const 日志_DNS错误 = 解码64('ZG5zIGVycjo=');
-const 日志_DNS成功 = 解码64('ZG5zIHJlc29sdmUgc3VjY2Vzczo=');
-const 日志_套接字错误 = 解码64('c29ja2V0IGVycg==');
-const 日志_流取消 = 解码64('c3RyZWF0IGNhbmNlbDo=');
-const 日志_套接字关闭 = 解码64('c29ja2V0IGNsb3NlZA==');
-const 日志_发送握手 = 解码64('c2VudCBzb2NrcyBncmVldGluZw==');
-const 日志_版本错误 = 解码64('c29ja3Mgc2VydmVyIHZlcnNpb24gZXJyb3I=');
-const 日志_无认证方法 = 解码64('bm8gYWNjZXB0YWJsZSBtZXRob2Rz');
-const 日志_需要认证 = 解码64('c29ja3Mgc2VydmVyIG5lZWRzIGF1dGg=');
-const 日志_认证失败 = 解码64('ZmFpbCB0byBhdXRoIHNvY2tzIHNlcnZlcg==');
-const 日志_请求发送 = 解码64('c2VudCBzb2NrcyByZXF1ZXN0');
-const 日志_连接打开 = 解码64('c29ja3MgY29ubmVjdGlvbiBvcGVuZWQ=');
-const 日志_连接失败 = 解码64('ZmFpbCB0byBvcGVuIHNvY2tzIGNvbm5lY3Rpb24=');
-
-const 响应_未找到 = 解码64('Tm90IGZvdW5k');
-const 内容类型_纯文本 = 解码64('dGV4dC9wbGFpbjtjaGFyc2V0PXV0Zi04');
-const 升级头名称 = 解码64('VXBncmFkZQ==');
-const 协议_WebSocket = 解码64('d2Vic29ja2V0');
-const 协议_早期数据 = 解码64('c2VjLXdlYnNvY2tldC1wcm90b2NvbA==');
-const 内容类型头 = 解码64('Y29udGVudC10eXBl');
-const 日志_UDP标签 = 解码64('dWRwIA==');
-const 日志_TCP标签 = 解码64('dGNwIA==');
-
-const UUID正则 = /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-let 认证令牌 = '5b75df69-62e0-4f8d-82f4-c4763c6a9ec3';
-let 代理IP = 'ProxyIP.JP.CMLiussss.net;
-let socks5地址 = '';
-let 解析的socks5地址 = {};
-let 启用socks = false;
-
-if (!验证UUID(认证令牌)) throw new Error(错误_无效标识字符串);
-
-export default {
-  async fetch(请求, 环境, 上下文) {
-    try {
-      认证令牌 = 环境.UUID || 认证令牌;
-      代理IP = 环境.PROXYIP || 代理IP;
-      socks5地址 = 环境.SOCKS5 || socks5地址;
-      if (socks5地址) {
-        try {
-          解析的socks5地址 = 解析socks5地址(socks5地址);
-          启用socks = true;
-        } catch (错误) {
-          console.log(错误.toString());
-          启用socks = false;
-        }
-      }
-      const 升级头 = 请求.headers.get(升级头名称);
-      if (!升级头 || 升级头 !== 协议_WebSocket) {
-        const 网址 = new URL(请求.url);
-        switch (网址.pathname) {
-          case '/':
-            return fetch('https://global.cctv.com/');
-          default:
-            return new Response(响应_未找到, { status: 404 });
-        }
-      } else {
-        return await 处理WebSocket(请求);
-      }
-    } catch (错误) {
-      return new Response(错误.toString());
-    }
-  },
+import {connect} from 'cloudflare:sockets';
+const uuid = '5b75df69-62e0-4f8d-82f4-c4763c6a9ec3';
+//**警告**:trojan使用的sha224密钥，需要自己计算，当前设置为密码666的密钥
+//**警告**:trojan使用的sha224密钥，需要自己计算，当前设置为密码666的密钥
+//**警告**:trojan使用的sha224密钥，需要自己计算，当前设置为密码666的密钥
+//**警告**:trojan使用的sha224密钥计算网址：https://www.lzltool.com/data-sha224
+const passWordSha224 = 'be53a472f0d200d2ee65054cd32884596a09b3a3ecf1e1104fdb0bdd';
+const bufferSize = 256 * 1024;
+const startThreshold = 50 * 1024 * 1024;
+const maxChunkLen = 64 * 1024;
+const flushTime = 4;
+let concurrency = 4;
+const urlParamCacheLimit = 20;
+const proxyStrategyOrder = ['socks', 'http'];
+const dohEndpoints = ['https://cloudflare-dns.com/dns-query', 'https://dns.google/dns-query'];
+const dohNatEndpoints = ['https://cloudflare-dns.com/dns-query', 'https://dns.google/resolve'];
+const proxyIpAddrs = {EU: 'ProxyIP.DE.CMLiussss.net', AS: 'ProxyIP.SG.CMLiussss.net', JP: 'ProxyIP.JP.CMLiussss.net', US: 'ProxyIP.US.CMLiussss.net'};
+const finallyProxyHost = 'ProxyIP.CMLiussss.net';
+const coloRegions = {
+    JP: new Set(['FUK', 'ICN', 'KIX', 'NRT', 'OKA']),
+    EU: new Set([
+        'ACC', 'ADB', 'ALA', 'ALG', 'AMM', 'AMS', 'ARN', 'ATH', 'BAH', 'BCN', 'BEG', 'BGW', 'BOD', 'BRU', 'BTS', 'BUD', 'CAI',
+        'CDG', 'CPH', 'CPT', 'DAR', 'DKR', 'DMM', 'DOH', 'DUB', 'DUR', 'DUS', 'DXB', 'EBB', 'EDI', 'EVN', 'FCO', 'FRA', 'GOT',
+        'GVA', 'HAM', 'HEL', 'HRE', 'IST', 'JED', 'JIB', 'JNB', 'KBP', 'KEF', 'KWI', 'LAD', 'LED', 'LHR', 'LIS', 'LOS', 'LUX',
+        'LYS', 'MAD', 'MAN', 'MCT', 'MPM', 'MRS', 'MUC', 'MXP', 'NBO', 'OSL', 'OTP', 'PMO', 'PRG', 'RIX', 'RUH', 'RUN', 'SKG',
+        'SOF', 'STR', 'TBS', 'TLL', 'TLV', 'TUN', 'VIE', 'VNO', 'WAW', 'ZAG', 'ZRH']),
+    AS: new Set([
+        'ADL', 'AKL', 'AMD', 'BKK', 'BLR', 'BNE', 'BOM', 'CBR', 'CCU', 'CEB', 'CGK', 'CMB', 'COK', 'DAC', 'DEL', 'HAN', 'HKG',
+        'HYD', 'ISB', 'JHB', 'JOG', 'KCH', 'KHH', 'KHI', 'KTM', 'KUL', 'LHE', 'MAA', 'MEL', 'MFM', 'MLE', 'MNL', 'NAG', 'NOU',
+        'PAT', 'PBH', 'PER', 'PNH', 'SGN', 'SIN', 'SYD', 'TPE', 'ULN', 'VTE'])
 };
-
-async function 处理WebSocket(请求) {
-  const 套接字对 = new WebSocketPair();
-  const [客户端, 服务端] = Object.values(套接字对);
-  服务端.accept();
-
-  let 目标地址 = '';
-  let 目标端口 = '';
-  const 记录日志 = (信息, 错误) => console.log(`[${目标地址}:${目标端口}] ${信息}`, 错误 || '');
-  const 早期数据协议 = 请求.headers.get(协议_早期数据) || '';
-  const 可读流 = 创建可读流(服务端, 早期数据协议, 记录日志);
-
-  let 远程套接字包装 = { value: null };
-  let 是否DNS = false;
-
-  可读流.pipeTo(
-    new WritableStream({
-      async write(数据块, 控制器) {
-        if (是否DNS) {
-          return await 处理DNS查询(数据块, 服务端, null, 记录日志);
+const coloToProxyMap = new Map();
+for (const [region, colos] of Object.entries(coloRegions)) {for (const colo of colos) coloToProxyMap.set(colo, proxyIpAddrs[region])}
+const uuidBytes = new Uint8Array(16), hashBytes = new Uint8Array(56), offsets = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4];
+for (let i = 0, c; i < 16; i++) uuidBytes[i] = (((c = uuid.charCodeAt(i * 2 + offsets[i])) > 64 ? c + 9 : c) & 0xF) << 4 | (((c = uuid.charCodeAt(i * 2 + offsets[i] + 1)) > 64 ? c + 9 : c) & 0xF);
+for (let i = 0; i < 56; i++) hashBytes[i] = passWordSha224.charCodeAt(i);
+const [textEncoder, textDecoder, socks5Init] = [new TextEncoder(), new TextDecoder(), new Uint8Array([5, 2, 0, 2])];
+const html = `<body style=margin:0;overflow:hidden;background:#000><canvas id=c style=width:100vw;height:100vh><script>var C=document.getElementById("c"),g=C.getContext("webgl"),t=0,P,R,F,U,O,X,Y,L,T,b=.4,K="float L(vec3 v){vec3 a=v;float b,c,d;for(int i=0;i<5;i++){b=length(a);c=atan(a.y,a.x)*10.;d=acos(a.z/b)*10.;b=pow(b,8.);a=vec3(b*sin(d)*cos(c),b*sin(d)*sin(c),b*cos(d))+v;if(b>6.)break;}return 4.-dot(a,a);}",VS="attribute vec4 p;varying vec3 d,ld;uniform vec3 r,f,u;uniform float x,y;void main(){gl_Position=p;d=f+r*p.x*x+u*p.y*y;ld=vec3(p.x*x,p.y*y,-1.);}",FS="precision highp float;float L(vec3 v);uniform vec3 r,f,u,o;uniform float t;varying vec3 d,ld;uniform float l;void main(){vec3 tc=vec3(0);for(int i=0;i<4;i++){vec2 of=vec2(mod(float(i),2.),floor(float(i)/2.))*.5;vec3 rd=normalize(d+r*of.x*.001+u*of.y*.001),c=vec3(0);float s=.002*l,r1,r2,r3;for(int k=2;k<1200;k++){float ds=s*float(k);vec3 p=o+rd*ds;if(L(p)>0.){r1=s*float(k-1);r2=ds;for(int j=0;j<24;j++){r3=(r1+r2)*.5;if(L(o+rd*r3)>0.)r2=r3;else r1=r3;}vec3 v=o+rd*r3,nw;float e=r3*1e-4;nw=normalize(vec3(L(v-r*e)-L(v+r*e),L(v-u*e)-L(v+u*e),L(v+f*e)-L(v-f*e)));vec3 rf=reflect(normalize(ld),nw);float d2=dot(v,v),lt=pow(max(0.,dot(rf,vec3(.276,.92,.276))),4.)*.45+max(0.,dot(nw,vec3(.276,.92,.276)))*.25+.3;c=(sin(d2*5.+t+vec3(0,2,4))*.5+.5)*lt;break;}}tc+=c;}gl_FragColor=vec4(pow(tc*.25,vec3(.7)),1);}";function i(){var s=g.createProgram(),v=g.createShader(35633),f=g.createShader(35632);g.shaderSource(v,VS),g.compileShader(v),g.shaderSource(f,FS+K),g.compileShader(f),g.attachShader(s,v),g.attachShader(s,f),g.linkProgram(s),g.useProgram(s),P=g.getAttribLocation(s,"p"),R=g.getUniformLocation(s,"r"),F=g.getUniformLocation(s,"f"),U=g.getUniformLocation(s,"u"),O=g.getUniformLocation(s,"o"),X=g.getUniformLocation(s,"x"),Y=g.getUniformLocation(s,"y"),L=g.getUniformLocation(s,"l"),T=g.getUniformLocation(s,"t"),g.bindBuffer(34962,g.createBuffer()),g.bufferData(34962,new Float32Array([-1,-1,0,1,-1,0,1,1,0,-1,-1,0,1,1,0,-1,1,0]),35044),g.vertexAttribPointer(P,3,5126,!1,0,0),g.enableVertexAttribArray(P)}function w(){t+=.02,innerWidth*devicePixelRatio!=C.width&&(C.width=innerWidth*(d=devicePixelRatio||1),C.height=innerHeight*d,g.viewport(0,0,C.width,C.height));var v=C.width/C.height;g.uniform1f(X,v>1?v:1),g.uniform1f(Y,v>1?1:1/v),g.uniform1f(L,1.6),g.uniform1f(T,t),g.uniform3f(O,1.6*Math.cos(t*.5)*Math.cos(b),1.6*Math.sin(b),1.6*Math.sin(t*.5)*Math.cos(b)),g.uniform3f(R,Math.sin(t*.5),0,-Math.cos(t*.5)),g.uniform3f(U,-Math.sin(b)*Math.cos(t*.5),Math.cos(b),-Math.sin(b)*Math.sin(t*.5)),g.uniform3f(F,-Math.cos(t*.5)*Math.cos(b),-Math.sin(b),-Math.sin(t*.5)*Math.cos(b)),g.drawArrays(4,0,6),requestAnimationFrame(w)}i(),w()</script>`;
+const binaryAddrToString = (addrType, addrBytes) => {
+    if (addrType === 3) return textDecoder.decode(addrBytes);
+    if (addrType === 1) return `${addrBytes[0]}.${addrBytes[1]}.${addrBytes[2]}.${addrBytes[3]}`;
+    let ipv6 = ((addrBytes[0] << 8) | addrBytes[1]).toString(16);
+    for (let i = 1; i < 8; i++) ipv6 += ':' + ((addrBytes[i * 2] << 8) | addrBytes[i * 2 + 1]).toString(16);
+    return `[${ipv6}]`;
+};
+const parseHostPort = (addr, defaultPort) => {
+    let host = addr, port = defaultPort, idx;
+    if (addr.charCodeAt(0) === 91) {
+        if ((idx = addr.indexOf(']:')) !== -1) {
+            host = addr.substring(0, idx + 1);
+            port = addr.substring(idx + 2);
         }
-        if (远程套接字包装.value) {
-          const 写入器 = 远程套接字包装.value.writable.getWriter();
-          await 写入器.write(数据块);
-          写入器.releaseLock();
-          return;
-        }
-
-        const {
-          hasError: 有错误,
-          message: 消息,
-          addressType: 地址类型,
-          portRemote: 远程端口 = 443,
-          addressRemote: 远程地址 = '',
-          rawDataIndex: 原始数据索引,
-          wVersion: 版本 = new Uint8Array([0, 0]),
-          isUDP: 是否UDP,
-        } = 解析w头(数据块, 认证令牌);
-
-        目标地址 = 远程地址;
-        目标端口 = `${远程端口}--${Math.random()} ${是否UDP ? 日志_UDP标签 : 日志_TCP标签}`;
-        if (有错误) throw new Error(消息);
-        if (是否UDP) {
-          if (远程端口 === 53) {
-            是否DNS = true;
-          } else {
-            throw new Error(错误_仅支持DNS_UDP);
-          }
-        }
-
-        const 版本头 = new Uint8Array([版本[0], 0]);
-        const 剩余数据 = 数据块.slice(原始数据索引);
-
-        if (是否DNS) {
-          return 处理DNS查询(剩余数据, 服务端, 版本头, 记录日志);
-        }
-        处理TCP出站(
-          远程套接字包装,
-          地址类型,
-          远程地址,
-          远程端口,
-          剩余数据,
-          服务端,
-          版本头,
-          记录日志
-        );
-      },
-      close() {
-        记录日志(日志_流关闭);
-      },
-      abort(原因) {
-        记录日志(日志_流中止, JSON.stringify(原因));
-      },
-    })
-  ).catch((错误) => 记录日志(日志_管道错误, 错误));
-
-  return new Response(null, {
-    status: 101,
-    webSocket: 客户端,
-  });
-}
-
-async function 处理TCP出站(
-  远程套接字包装,
-  地址类型,
-  远程地址,
-  远程端口,
-  原始数据,
-  服务端,
-  版本头,
-  记录日志
-) {
-  async function 连接并写入(目标地址, 目标端口, 使用socks = false) {
-    const 套接字 = 使用socks
-      ? await socks5连接(地址类型, 目标地址, 目标端口, 记录日志)
-      : 连接({ hostname: 目标地址, port: 目标端口 });
-    远程套接字包装.value = 套接字;
-    记录日志(`${日志_连接成功} ${目标地址}:${目标端口}`);
-    const 写入器 = 套接字.writable.getWriter();
-    await 写入器.write(原始数据);
-    写入器.releaseLock();
-    return 套接字;
-  }
-
-  async function 重试() {
-    let 套接字;
-    if (启用socks) {
-      套接字 = await 连接并写入(远程地址, 远程端口, true);
-    } else {
-      套接字 = await 连接并写入(代理IP || 远程地址, 远程端口);
+    } else if ((idx = addr.indexOf('.tp')) !== -1 && addr.lastIndexOf(':') === -1) {
+        port = addr.substring(idx + 3, addr.indexOf('.', idx + 3));
+    } else if ((idx = addr.lastIndexOf(':')) !== -1) {
+        host = addr.substring(0, idx);
+        port = addr.substring(idx + 1);
     }
-    套接字.closed
-      .catch(错误 => console.log(日志_重试错误, 错误))
-      .finally(() => 安全关闭WebSocket(服务端));
-    远程套接字到WebSocket(套接字, 服务端, 版本头, 重试, 记录日志);
-  }
-
-  let 套接字 = await 连接并写入(远程地址, 远程端口);
-  远程套接字到WebSocket(套接字, 服务端, 版本头, 重试, 记录日志);
-}
-
-function 创建可读流(服务端, 早期数据, 记录日志) {
-  let 已取消 = false;
-  return new ReadableStream({
-    start(控制器) {
-      服务端.addEventListener('message', (事件) => {
-        if (已取消) return;
-        控制器.enqueue(事件.data);
-      });
-      服务端.addEventListener('close', () => {
-        安全关闭WebSocket(服务端);
-        if (已取消) return;
-        控制器.close();
-      });
-      服务端.addEventListener('error', (错误) => {
-        记录日志(日志_套接字错误);
-        控制器.error(错误);
-      });
-      const { earlyData: 早期数据字节, error: 错误 } = 解码早期数据(早期数据);
-      if (错误) 控制器.error(错误);
-      else if (早期数据字节) 控制器.enqueue(早期数据字节.buffer);
-    },
-    pull() {},
-    cancel(原因) {
-      if (已取消) return;
-      记录日志(`${日志_流取消} ${原因}`);
-      已取消 = true;
-      安全关闭WebSocket(服务端);
-    },
-  });
-}
-
-function 解析w头(数据块, 用户密钥) {
-  if (数据块.byteLength < 24) return { hasError: true, message: 错误_无效数据 };
-  const 版本 = new Uint8Array(数据块.slice(0, 1));
-  let 是否UDP = false;
-  const 用户ID字节 = new Uint8Array(数据块.slice(1, 17));
-  if (字节转UUID字符串(用户ID字节) !== 用户密钥) {
-    return { hasError: true, message: 错误_无效用户 };
-  }
-
-  const 可选长度 = new Uint8Array(数据块.slice(17, 18))[0];
-  const 命令 = new Uint8Array(数据块.slice(18 + 可选长度, 19 + 可选长度))[0];
-  if (命令 === 2) 是否UDP = true;
-  else if (命令 !== 1) {
-    return { hasError: true, message: 错误_不支持命令 };
-  }
-
-  const 端口起始 = 18 + 可选长度 + 1;
-  const 端口字节 = 数据块.slice(端口起始, 端口起始 + 2);
-  const 远程端口 = new DataView(端口字节).getUint16(0);
-
-  const 地址起始 = 端口起始 + 2;
-  const 地址类型 = new Uint8Array(数据块.slice(地址起始, 地址起始 + 1))[0];
-  let 地址长度 = 0;
-  let 地址值起始 = 地址起始 + 1;
-  let 远程地址 = '';
-
-  switch (地址类型) {
-    case 1:
-      地址长度 = 4;
-      远程地址 = new Uint8Array(数据块.slice(地址值起始, 地址值起始 + 地址长度)).join('.');
-      break;
-    case 2:
-      地址长度 = new Uint8Array(数据块.slice(地址值起始, 地址值起始 + 1))[0];
-      地址值起始 += 1;
-      远程地址 = new TextDecoder().decode(数据块.slice(地址值起始, 地址值起始 + 地址长度));
-      break;
-    case 3:
-      地址长度 = 16;
-      const 视图 = new DataView(数据块.slice(地址值起始, 地址值起始 + 地址长度));
-      const 片段 = [];
-      for (let i = 0; i < 8; i++) 片段.push(视图.getUint16(i * 2).toString(16));
-      远程地址 = 片段.join(':');
-      break;
-    default:
-      return { hasError: true, message: 错误_无效地址类型 };
-  }
-
-  if (!远程地址) return { hasError: true, message: 错误_空地址 };
-  return {
-    hasError: false,
-    addressRemote: 远程地址,
-    addressType: 地址类型,
-    portRemote: 远程端口,
-    rawDataIndex: 地址值起始 + 地址长度,
-    wVersion: 版本,
-    isUDP: 是否UDP,
-  };
-}
-
-async function 远程套接字到WebSocket(远程套接字, 服务端, 版本头, 重试函数, 记录日志) {
-  let 已收到数据 = false;
-  let 版本头副本 = 版本头;
-  await 远程套接字.readable
-    .pipeTo(
-      new WritableStream({
-        async write(数据块, 控制器) {
-          已收到数据 = true;
-          if (服务端.readyState !== 1) 控制器.error(日志_套接字关闭);
-          if (版本头副本) {
-            服务端.send(await new Blob([版本头副本, 数据块]).arrayBuffer());
-            版本头副本 = null;
-          } else {
-            服务端.send(数据块);
-          }
-        },
-        close() {
-          记录日志(`${日志_远程关闭} ${已收到数据}`);
-        },
-        abort(原因) {
-          console.error(日志_远程中止, 原因);
-        },
-      })
-    )
-    .catch((错误) => {
-      console.error(日志_传输错误, 错误.stack || 错误);
-      安全关闭WebSocket(服务端);
-    });
-
-  if (!已收到数据 && 重试函数) {
-    记录日志(日志_重试错误);
-    重试函数();
-  }
-}
-
-function 解码早期数据(字符串) {
-  if (!字符串) return { error: null };
-  try {
-    字符串 = 字符串.replace(/-/g, '+').replace(/_/g, '/');
-    const 二进制 = atob(字符串);
-    const 字节数组 = Uint8Array.from(二进制, (字符) => 字符.charCodeAt(0));
-    return { earlyData: 字节数组.buffer, error: null };
-  } catch (错误) {
-    return { error: 错误 };
-  }
-}
-
-function 验证UUID(字符串) {
-  return UUID正则.test(字符串);
-}
-
-const 十六进制表 = [];
-for (let i = 0; i < 256; i++) 十六进制表.push((i + 256).toString(16).slice(1));
-
-function 字节转UUID字符串(字节数组, 偏移 = 0) {
-  return (
-    十六进制表[字节数组[偏移 + 0]] +
-    十六进制表[字节数组[偏移 + 1]] +
-    十六进制表[字节数组[偏移 + 2]] +
-    十六进制表[字节数组[偏移 + 3]] +
-    '-' +
-    十六进制表[字节数组[偏移 + 4]] +
-    十六进制表[字节数组[偏移 + 5]] +
-    '-' +
-    十六进制表[字节数组[偏移 + 6]] +
-    十六进制表[字节数组[偏移 + 7]] +
-    '-' +
-    十六进制表[字节数组[偏移 + 8]] +
-    十六进制表[字节数组[偏移 + 9]] +
-    '-' +
-    十六进制表[字节数组[偏移 + 10]] +
-    十六进制表[字节数组[偏移 + 11]] +
-    十六进制表[字节数组[偏移 + 12]] +
-    十六进制表[字节数组[偏移 + 13]] +
-    十六进制表[字节数组[偏移 + 14]] +
-    十六进制表[字节数组[偏移 + 15]]
-  ).toLowerCase();
-}
-
-const WS_打开 = 1;
-const WS_关闭中 = 2;
-function 安全关闭WebSocket(套接字) {
-  try {
-    if (套接字.readyState === WS_打开 || 套接字.readyState === WS_关闭中) {
-      套接字.close();
+    return [host, (port = parseInt(port), isNaN(port) ? defaultPort : port)];
+};
+const parseAuthString = (authParam) => {
+    let username, password, hostStr;
+    const atIndex = authParam.lastIndexOf('@');
+    if (atIndex === -1) {hostStr = authParam} else {
+        const cred = authParam.substring(0, atIndex);
+        hostStr = authParam.substring(atIndex + 1);
+        const colonIndex = cred.indexOf(':');
+        if (colonIndex === -1) {username = cred} else {
+            username = cred.substring(0, colonIndex);
+            password = cred.substring(colonIndex + 1);
+        }
     }
-  } catch (错误) {
-    console.error(日志_关闭错误, 错误);
-  }
-}
-
-async function 处理DNS查询(数据块, 服务端, 版本头, 记录日志) {
-  try {
-    const DNS服务器 = '8.8.4.4';
-    const DNS端口 = 53;
-    let 版本头副本 = 版本头;
-    const 套接字 = 连接({ hostname: DNS服务器, port: DNS端口 });
-    记录日志(`${日志_连接成功} ${DNS服务器}:${DNS端口}`);
-    const 写入器 = 套接字.writable.getWriter();
-    await 写入器.write(数据块);
-    写入器.releaseLock();
-
-    await 套接字.readable.pipeTo(
-      new WritableStream({
-        async write(响应块) {
-          if (服务端.readyState === WS_打开) {
-            if (版本头副本) {
-              服务端.send(await new Blob([版本头副本, 响应块]).arrayBuffer());
-              版本头副本 = null;
-            } else {
-              服务端.send(响应块);
+    const [hostname, port] = parseHostPort(hostStr, 1080);
+    return {username, password, hostname, port};
+};
+const createConnect = (hostname, port, socket = connect({hostname, port})) => socket.opened.then(() => socket);
+const concurrentConnect = (hostname, port, limit = concurrency) => {
+    if (limit === 1) return createConnect(hostname, port);
+    return Promise.any(Array(limit).fill(null).map(() => createConnect(hostname, port)));
+};
+const connectViaSocksProxy = async (targetAddrType, targetPortNum, socksAuth, addrBytes, limit) => {
+    const socksSocket = await concurrentConnect(socksAuth.hostname, socksAuth.port, limit);
+    const writer = socksSocket.writable.getWriter();
+    const reader = socksSocket.readable.getReader();
+    await writer.write(socks5Init);
+    const {value: authResponse} = await reader.read();
+    if (!authResponse || authResponse[0] !== 5 || authResponse[1] === 0xFF) return null;
+    if (authResponse[1] === 2) {
+        if (!socksAuth.username) return null;
+        const userBytes = textEncoder.encode(socksAuth.username);
+        const passBytes = textEncoder.encode(socksAuth.password || '');
+        const uLen = userBytes.length, pLen = passBytes.length, authReq = new Uint8Array(3 + uLen + pLen)
+        authReq[0] = 1, authReq[1] = uLen, authReq.set(userBytes, 2), authReq[2 + uLen] = pLen, authReq.set(passBytes, 3 + uLen);
+        await writer.write(authReq);
+        const {value: authResult} = await reader.read();
+        if (!authResult || authResult[0] !== 1 || authResult[1] !== 0) return null;
+    } else if (authResponse[1] !== 0) {return null}
+    const isDomain = targetAddrType === 3, socksReq = new Uint8Array(6 + addrBytes.length + (isDomain ? 1 : 0));
+    socksReq[0] = 5, socksReq[1] = 1, socksReq[2] = 0, socksReq[3] = targetAddrType;
+    isDomain ? (socksReq[4] = addrBytes.length, socksReq.set(addrBytes, 5)) : socksReq.set(addrBytes, 4);
+    socksReq[socksReq.length - 2] = targetPortNum >> 8, socksReq[socksReq.length - 1] = targetPortNum & 0xff;
+    await writer.write(socksReq);
+    const {value: finalResponse} = await reader.read();
+    if (!finalResponse || finalResponse[1] !== 0) return null;
+    writer.releaseLock(), reader.releaseLock();
+    return socksSocket;
+};
+const staticHeaders = `User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36\r\nProxy-Connection: Keep-Alive\r\nConnection: Keep-Alive\r\n\r\n`;
+const encodedStaticHeaders = textEncoder.encode(staticHeaders);
+const connectViaHttpProxy = async (targetAddrType, targetPortNum, httpAuth, addrBytes, limit) => {
+    const {username, password, hostname, port} = httpAuth;
+    const proxySocket = await concurrentConnect(hostname, port, limit);
+    const writer = proxySocket.writable.getWriter();
+    const httpHost = binaryAddrToString(targetAddrType, addrBytes);
+    let dynamicHeaders = `CONNECT ${httpHost}:${targetPortNum} HTTP/1.1\r\nHost: ${httpHost}:${targetPortNum}\r\n`;
+    if (username) dynamicHeaders += `Proxy-Authorization: Basic ${btoa(`${username}:${password || ''}`)}\r\n`;
+    const fullHeaders = new Uint8Array(dynamicHeaders.length * 3 + encodedStaticHeaders.length);
+    const {written} = textEncoder.encodeInto(dynamicHeaders, fullHeaders);
+    fullHeaders.set(encodedStaticHeaders, written);
+    await writer.write(fullHeaders.subarray(0, written + encodedStaticHeaders.length));
+    writer.releaseLock();
+    const reader = proxySocket.readable.getReader();
+    const buffer = new Uint8Array(512);
+    let bytesRead = 0, statusChecked = false;
+    while (bytesRead < buffer.length) {
+        const {value, done} = await reader.read();
+        if (done || bytesRead + value.length > buffer.length) return null;
+        const prevBytesRead = bytesRead;
+        buffer.set(value, bytesRead);
+        bytesRead += value.length;
+        if (!statusChecked && bytesRead >= 12) {
+            if (buffer[9] !== 50) return null;
+            statusChecked = true;
+        }
+        let i = Math.max(15, prevBytesRead - 3);
+        while ((i = buffer.indexOf(13, i)) !== -1 && i <= bytesRead - 4) {
+            if (buffer[i + 1] === 10 && buffer[i + 2] === 13 && buffer[i + 3] === 10) {
+                reader.releaseLock();
+                return proxySocket;
             }
-          }
-        },
-        close() {
-          记录日志(`dns server(${DNS服务器}) tcp is close`);
-        },
-        abort(原因) {
-          console.error(`dns server(${DNS服务器}) tcp abort`, 原因);
-        },
-      })
-    );
-  } catch (错误) {
-    console.error(日志_DNS错误, 错误.message);
-  }
-}
-
-async function socks5连接(地址类型, 目标地址, 目标端口, 记录日志) {
-  const { username, password, hostname, port } = 解析的socks5地址;
-  const 套接字 = 连接({ hostname, port });
-  const 写入器 = 套接字.writable.getWriter();
-  const 编码器 = new TextEncoder();
-
-  const 握手包 = new Uint8Array([5, 2, 0, 2]);
-  await 写入器.write(握手包);
-  记录日志(日志_发送握手);
-
-  const 读取器 = 套接字.readable.getReader();
-  let 响应 = (await 读取器.read()).value;
-  if (响应[0] !== 0x05) {
-    记录日志(日志_版本错误);
-    return;
-  }
-  if (响应[1] === 0xff) {
-    记录日志(日志_无认证方法);
-    return;
-  }
-
-  if (响应[1] === 0x02) {
-    记录日志(日志_需要认证);
-    if (!username || !password) {
-      记录日志(错误_SOCKS认证缺失);
-      return;
+            i++;
+        }
     }
-    const 认证请求 = new Uint8Array([
-      1,
-      username.length,
-      ...编码器.encode(username),
-      password.length,
-      ...编码器.encode(password),
-    ]);
-    await 写入器.write(认证请求);
-    响应 = (await 读取器.read()).value;
-    if (响应[0] !== 0x01 || 响应[1] !== 0x00) {
-      记录日志(日志_认证失败);
-      return;
+    return null;
+};
+const parseProtocolChunk = (chunk) => {
+    const len = chunk.length;
+    const result = {success: false, needMore: false, handshake: null, parsedRequest: null};
+    let isVL = false;
+    if (len >= 17) {
+        isVL = true;
+        for (let i = 0; i < 16; i++) {
+            if (chunk[i + 1] !== uuidBytes[i]) {
+                isVL = false;
+                break;
+            }
+        }
     }
-  }
-
-  let DSTADDR;
-  switch (地址类型) {
-    case 1:
-      DSTADDR = new Uint8Array([1, ...目标地址.split('.').map(Number)]);
-      break;
-    case 2:
-      DSTADDR = new Uint8Array([3, 目标地址.length, ...编码器.encode(目标地址)]);
-      break;
-    case 3:
-      DSTADDR = new Uint8Array([
-        4,
-        ...目标地址.split(':').flatMap((x) => [
-          parseInt(x.slice(0, 2), 16),
-          parseInt(x.slice(2), 16),
-        ]),
-      ]);
-      break;
-    default:
-      记录日志(错误_无效地址类型);
-      return;
-  }
-
-  const 请求包 = new Uint8Array([
-    5,
-    1,
-    0,
-    ...DSTADDR,
-    目标端口 >> 8,
-    目标端口 & 0xff,
-  ]);
-  await 写入器.write(请求包);
-  记录日志(日志_请求发送);
-
-  响应 = (await 读取器.read()).value;
-  if (响应[1] === 0x00) {
-    记录日志(日志_连接打开);
-  } else {
-    记录日志(日志_连接失败);
-    return;
-  }
-
-  写入器.releaseLock();
-  读取器.releaseLock();
-  return 套接字;
-}
-
-function 解析socks5地址(地址) {
-  let [后部, 前部] = 地址.split('@').reverse();
-  let username, password, hostname, port;
-  if (前部) {
-    const 分段 = 前部.split(':');
-    if (分段.length !== 2) throw new Error(错误_SOCKS格式无效);
-    [username, password] = 分段;
-  }
-  const 分段后 = 后部.split(':');
-  port = Number(分段后.pop());
-  if (isNaN(port)) throw new Error(错误_SOCKS格式无效);
-  hostname = 分段后.join(':');
-  const 正则IPv6 = /^\[.*\]$/;
-  if (hostname.includes(':') && !正则IPv6.test(hostname)) {
-    throw new Error(错误_SOCKS格式无效);
-  }
-  return { username, password, hostname, port };
-  }
+    if (isVL) {
+        if (len < 18) return result.needMore = true, result;
+        const offset = 19 + chunk[17];
+        if (len < offset + 4) return result.needMore = true, result;
+        let addrType = chunk[offset + 2];
+        if (addrType !== 1) addrType += 1;
+        const addrLen = addrType === 3 ? (offset + 3 < len ? chunk[offset + 3] : null) : addrType === 1 ? 4 : addrType === 4 ? 16 : -1;
+        if (addrLen === null) return result.needMore = true, result;
+        if (addrLen > 0) {
+            const addrOffset = addrType === 3 ? offset + 4 : offset + 3;
+            const dataOffset = addrOffset + addrLen;
+            if (len < dataOffset) return result.needMore = true, result;
+            const port = (chunk[offset] << 8) | chunk[offset + 1];
+            result.handshake = new Uint8Array([chunk[0], 0]);
+            result.success = true;
+            result.parsedRequest = {addrType, addrBytes: chunk.subarray(addrOffset, addrOffset + addrLen), dataOffset, port, isDns: port === 53};
+            return result;
+        }
+    }
+    if (len >= 56) {
+        let isTJ = true;
+        for (let i = 0; i < 56; i++) {
+            if (chunk[i] !== hashBytes[i]) {
+                isTJ = false;
+                break;
+            }
+        }
+        if (isTJ) {
+            if (len < 60) return result.needMore = true, result;
+            const addrType = chunk[59];
+            const addrLen = addrType === 3 ? (60 < len ? chunk[60] : null) : addrType === 1 ? 4 : addrType === 4 ? 16 : -1;
+            if (addrLen === null) return result.needMore = true, result;
+            if (addrLen > 0) {
+                const addrOffset = addrType === 3 ? 61 : 60;
+                const dataOffset = addrOffset + addrLen + 4;
+                if (len < dataOffset) return result.needMore = true, result;
+                const portOffset = addrOffset + addrLen;
+                const port = (chunk[portOffset] << 8) | chunk[portOffset + 1];
+                result.success = true;
+                result.parsedRequest = {addrType, addrBytes: chunk.subarray(addrOffset, addrOffset + addrLen), dataOffset, port, isDns: port === 53};
+                return result;
+            }
+        }
+    }
+    return len < 56 ? (result.needMore = true, result) : result;
+};
+const dohJsonOptions = {headers: {'Accept': 'application/dns-json'}}, dohHeaders = {'content-type': 'application/dns-message'};
+const concurrentDnsResolve = async (hostname, recordType) => {
+    const dnsResult = await Promise.any(dohNatEndpoints.map(endpoint =>
+        fetch(`${endpoint}?name=${hostname}&type=${recordType}`, dohJsonOptions).then(response => {
+            if (!response.ok) throw new Error();
+            return response.json();
+        })
+    ));
+    const answer = dnsResult.Answer || dnsResult.answer;
+    if (!answer || answer.length === 0) return null;
+    return answer;
+};
+const dohDnsHandler = async (payload) => {
+    if (payload.byteLength < 2) return null;
+    const dnsQueryData = payload.subarray(2);
+    const resp = await Promise.any(dohEndpoints.map(endpoint =>
+        fetch(endpoint, {method: 'POST', headers: dohHeaders, body: dnsQueryData}).then(response => {
+            if (!response.ok) throw new Error();
+            return response;
+        })
+    ));
+    const dnsQueryResult = await resp.arrayBuffer();
+    const udpSize = dnsQueryResult.byteLength;
+    const packet = new Uint8Array(2 + udpSize);
+    packet[0] = (udpSize >> 8) & 0xff, packet[1] = udpSize & 0xff;
+    packet.set(new Uint8Array(dnsQueryResult), 2);
+    return packet;
+};
+const williamResult = async (william) => {
+    const answer = await concurrentDnsResolve(william, 'TXT');
+    if (!answer) return null;
+    let txtData, i = 0, len = answer.length;
+    for (; i < len; i++) if (answer[i].type === 16) {
+        txtData = answer[i].data;
+        break;
+    }
+    if (!txtData) return null;
+    if (txtData.charCodeAt(0) === 34 && txtData.charCodeAt(txtData.length - 1) === 34) txtData = txtData.slice(1, -1);
+    const raw = txtData.split(/,|\\010|\n/), prefixes = [];
+    for (i = 0, len = raw.length; i < len; i++) {
+        const s = raw[i].trim();
+        if (s) prefixes.push(s);
+    }
+    return prefixes.length ? prefixes : null;
+};
+const proxyIpRegex = /william|fxpip/;
+const connectProxyIp = async (param, limit) => {
+    if (proxyIpRegex.test(param)) {
+        let resolvedIps = await williamResult(param);
+        if (!resolvedIps || resolvedIps.length === 0) return null;
+        if (resolvedIps.length > limit) {
+            for (let i = resolvedIps.length - 1; i > 0; i--) {
+                const j = (Math.random() * (i + 1)) | 0;
+                [resolvedIps[i], resolvedIps[j]] = [resolvedIps[j], resolvedIps[i]];
+            }
+            resolvedIps = resolvedIps.slice(0, limit);
+        }
+        const connectionPromises = resolvedIps.map(ip => {
+            const [host, port] = parseHostPort(ip, 443);
+            return createConnect(host, port);
+        });
+        return await Promise.any(connectionPromises);
+    }
+    const [host, port] = parseHostPort(param, 443);
+    return concurrentConnect(host, port, limit);
+};
+const strategyExecutorMap = new Map([
+    [0, async ({addrType, port, addrBytes}) => {
+        const hostname = binaryAddrToString(addrType, addrBytes);
+        return concurrentConnect(hostname, port);
+    }],
+    [1, async ({addrType, port, addrBytes}, param, limit) => {
+        return connectViaSocksProxy(addrType, port, param, addrBytes, limit);
+    }],
+    [2, async ({addrType, port, addrBytes}, param, limit) => {
+        return connectViaHttpProxy(addrType, port, param, addrBytes, limit);
+    }],
+    [3, async (_parsedRequest, param, limit) => {
+        return connectProxyIp(param, limit);
+    }]
+]);
+const paramRegex = /(gs5|s5all|ghttp|httpall|s5|socks|http|ip)(?:=|:\/\/|%3A%2F%2F)([^&]+)|(proxyall|globalproxy)/gi;
+const urlListCacheDict = Object.create(null), urlListCacheKeys = new Array(urlParamCacheLimit);
+let urlListCacheIndex = 0;
+const establishTcpConnection = async (parsedRequest, request) => {
+    let u = request.url, clean = u.slice(u.indexOf('/', 10) + 1), l = clean.length, list = [];
+    const c = clean.charCodeAt(l - 1);
+    if (c === 47 || c === 61) clean = clean.slice(0, l - 1);
+    const cachedList = urlListCacheDict[clean];
+    if (cachedList !== undefined) {
+        list = cachedList;
+    } else {
+        if (clean.length < 6) {
+            list.push({type: 0}, {type: 3, param: coloToProxyMap.get(request.cf?.colo) ?? proxyIpAddrs.US}, {type: 3, param: finallyProxyHost});
+        } else {
+            const p = Object.create(null);
+            paramRegex.lastIndex = 0;
+            let m;
+            while ((m = paramRegex.exec(clean))) {p[(m[1] || m[3]).toLowerCase()] = m[2] ? (m[2].charCodeAt(m[2].length - 1) === 61 ? m[2].slice(0, -1) : m[2]) : true}
+            const s5 = p.gs5 || p.s5all || p.s5 || p.socks, http = p.ghttp || p.httpall || p.http;
+            const proxyAll = !!(p.gs5 || p.s5all || p.ghttp || p.httpall || p.proxyall || p.globalproxy);
+            if (!proxyAll) list.push({type: 0});
+            const add = (v, t) => {
+                if (!v) return;
+                const parts = decodeURIComponent(v).split(',').filter(Boolean);
+                if (parts.length) {
+                    const parsedParams = parts.map(part => {
+                        if (t === 1 || t === 2) return parseAuthString(part);
+                        return part;
+                    });
+                    list.push({type: t, param: parsedParams, concurrent: true});
+                }
+            };
+            for (let i = 0; i < proxyStrategyOrder.length; i++) {
+                const k = proxyStrategyOrder[i];
+                add(k === 'socks' ? s5 : http, k === 'socks' ? 1 : 2);
+            }
+            if (proxyAll) {
+                if (!list.length) list.push({type: 0});
+            } else {
+                add(p.ip, 3);
+                list.push({type: 3, param: coloToProxyMap.get(request.cf?.colo) ?? proxyIpAddrs.US}, {type: 3, param: finallyProxyHost});
+            }
+        }
+        const oldKey = urlListCacheKeys[urlListCacheIndex];
+        if (oldKey !== undefined) delete urlListCacheDict[oldKey];
+        urlListCacheKeys[urlListCacheIndex] = clean;
+        urlListCacheDict[clean] = list;
+        urlListCacheIndex = (urlListCacheIndex + 1) % urlParamCacheLimit;
+    }
+    for (let i = 0; i < list.length; i++) {
+        try {
+            const exec = strategyExecutorMap.get(list[i].type);
+            const sub = (list[i]['concurrent'] && Array.isArray(list[i].param)) ? Math.max(1, Math.floor(concurrency / list[i].param.length)) : undefined;
+            const socket = await (list[i]['concurrent'] && Array.isArray(list[i].param) ? Promise.any(list[i].param.map(ip => exec(parsedRequest, ip, sub))) : exec(parsedRequest, list[i].param));
+            if (socket) return socket;
+        } catch {}
+    }
+    return null;
+};
+const manualPipe = async (readable, writable, close) => {
+    const safeBufferSize = bufferSize - maxChunkLen, fastFlushOffset = Math.max((bufferSize / flushTime) << 1, maxChunkLen << 1);
+    let buffer = new ArrayBuffer(bufferSize), spareBuffer = new ArrayBuffer(maxChunkLen), bufferView = new Uint8Array(buffer);
+    let offset = 0, totalBytes = 0, time = 0, timerId = null, resume = null, isReading = false, needsFlush = false, protectFlush = false, flushDelayCount = 0;
+    let isClose = false, fastFlush = true;
+    const flushBuffer = (force = false) => {
+        if (isReading) return needsFlush = true;
+        fastFlush = offset < fastFlushOffset;
+        if (!force && offset > 0 && offset < maxChunkLen && !isClose && flushDelayCount < 2) {
+            flushDelayCount++, needsFlush = false;
+            timerId && clearTimeout(timerId), timerId = setTimeout(flushBuffer, 2);
+            return;
+        }
+        if (offset > 0 && !isClose) {
+            offset > safeBufferSize
+                ? (writable.send(bufferView.subarray(0, offset)), buffer = new ArrayBuffer(bufferSize), bufferView = new Uint8Array(buffer))
+                : writable.send(bufferView.slice(0, offset));
+            offset = 0;
+        }
+        needsFlush = false, protectFlush = false, flushDelayCount = 0, timerId && (clearTimeout(timerId), timerId = null), resume?.(), resume = null;
+    };
+    const reader = readable.getReader({mode: 'byob'});
+    try {
+        while (true) {
+            const useSpare = offset > 0 && protectFlush;
+            let readBuffer = buffer, readOffset = offset;
+            isReading = offset > 0;
+            useSpare && (readBuffer = spareBuffer, readOffset = 0, isReading = false);
+            const {done, value} = await reader.read(new Uint8Array(readBuffer, readOffset, maxChunkLen));
+            isReading = false;
+            useSpare ? (bufferView.set(value, offset), spareBuffer = value.buffer) : (buffer = value.buffer, bufferView = new Uint8Array(buffer));
+            if (done) break;
+            const chunkLen = value.byteLength;
+            offset += chunkLen;
+            if (needsFlush) {
+                flushBuffer();
+            } else {
+                if (fastFlush || chunkLen < 28672) {
+                    totalBytes = 0, time = 0;
+                } else if ((totalBytes += chunkLen) > startThreshold) time = flushTime;
+                timerId ||= setTimeout(flushBuffer, time), protectFlush = chunkLen < maxChunkLen;
+                offset > safeBufferSize && (time === flushTime ? await new Promise(r => resume = r) : flushBuffer());
+            }
+        }
+    } catch {close?.(), isClose = true} finally {isReading = false, flushBuffer(true)}
+};
+const createBufferedTcpWriter = (tcpWriter, close) => {
+    const queue = new Array(4096);
+    let head = 0, tail = 0, size = 0, coalesceBuffer = null, drainActive = false, closed = false;
+    const closeWriter = () => {
+        if (closed) return;
+        closed = true;
+        for (let i = 0; i < 4096; i++) queue[i] = null;
+        close?.();
+    };
+    const drainQueue = async () => {
+        if (closed) return;
+        drainActive = true;
+        try {
+            while (size > 0 && !closed) {
+                let chunk = queue[head];
+                if (chunk.byteLength >= maxChunkLen) {
+                    queue[head] = null, head = (head + 1) & 4095, size--;
+                    await tcpWriter.write(chunk);
+                    continue;
+                }
+                let mergedLength = 0;
+                coalesceBuffer ||= new Uint8Array(maxChunkLen);
+                while (size > 0) {
+                    chunk = queue[head];
+                    if (mergedLength + chunk.byteLength > maxChunkLen) break;
+                    coalesceBuffer.set(chunk, mergedLength), mergedLength += chunk.byteLength;
+                    queue[head] = null, head = (head + 1) & 4095, size--;
+                }
+                if (mergedLength > 0) await tcpWriter.write(coalesceBuffer.subarray(0, mergedLength));
+            }
+        } catch {closeWriter()} finally {
+            drainActive = false;
+            if (size > 0 && !closed) drainActive = true, queueMicrotask(drainQueue);
+        }
+    };
+    return chunk => {
+        if (closed) return false;
+        const data = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+        if (!data.byteLength) return true;
+        if (size === 4096) return closeWriter(), false;
+        queue[tail] = data, tail = (tail + 1) & 4095, size++;
+        if (!drainActive) drainActive = true, queueMicrotask(drainQueue);
+        return true;
+    };
+};
+const createAsyncMicrotaskQueue = (consume, close) => {
+    const queue = new Array(2048);
+    let head = 0, tail = 0, size = 0, drainActive = false, closed = false;
+    const drainQueue = async () => {
+        if (closed) return;
+        drainActive = true;
+        try {
+            while (size > 0 && !closed) {
+                const chunk = queue[head];
+                queue[head] = null, head = (head + 1) & 2047, size--;
+                const res = consume(chunk);
+                if (res?.then) await res;
+            }
+        } catch {closed = true, close?.()} finally {
+            drainActive = false;
+            if (size > 0 && !closed) drainActive = true, queueMicrotask(drainQueue);
+        }
+    };
+    return chunk => {
+        if (closed) return;
+        if (size === 2048) return closed = true, close?.();
+        queue[tail] = chunk, tail = (tail + 1) & 2047, size++;
+        if (!drainActive) drainActive = true, queueMicrotask(drainQueue);
+    };
+};
+const handleSession = async (chunk, state, request, writable, close, isEarlyData = false) => {
+    state.needMore = false;
+    const parsed = parseProtocolChunk(chunk);
+    parsed.handshake && writable.send(parsed.handshake);
+    if (!parsed.success) return parsed.needMore ? (state.needMore = true) : close();
+    const parsedRequest = parsed.parsedRequest;
+    const payload = chunk.subarray(parsedRequest.dataOffset);
+    if (parsedRequest.isDns) {
+        const dnsPack = await dohDnsHandler(payload);
+        if (dnsPack?.byteLength) writable.send(dnsPack);
+        if (!isEarlyData) return close();
+    } else {
+        state.tcpSocket = await establishTcpConnection(parsedRequest, request);
+        if (!state.tcpSocket) return close();
+        const tcpWriter = state.tcpSocket.writable.getWriter();
+        if (payload.byteLength) tcpWriter.write(payload);
+        state.tcpWriter = createBufferedTcpWriter(tcpWriter, close);
+        manualPipe(state.tcpSocket.readable, writable, close);
+    }
+};
+const handleWebSocketConn = async (webSocket, request) => {
+    const protocolHeader = request.headers.get('sec-websocket-protocol');
+    // @ts-ignore
+    const earlyData = protocolHeader ? Uint8Array.fromBase64(protocolHeader, {alphabet: 'base64url'}) : null;
+    const state = {tcpWriter: null, tcpSocket: null};
+    let processingQueue = null;
+    const close = () => {webSocket.close()};
+    const process = (chunk) => {
+        if (state.tcpWriter) return state.tcpWriter(chunk);
+        return handleSession(earlyData ? chunk : new Uint8Array(chunk), state, request, webSocket, close, earlyData !== null);
+    };
+    processingQueue = createAsyncMicrotaskQueue(process, close);
+    if (earlyData) processingQueue(earlyData);
+    webSocket.addEventListener("message", event => (state.tcpWriter || processingQueue)(event.data));
+    webSocket.addEventListener("error", close);
+};
+const grpcHeaders = {'Content-Type': 'application/grpc', 'X-Accel-Buffering': 'no', 'Cache-Control': 'no-store'};
+const xhttpHeaders = {'Content-Type': 'application/octet-stream', 'grpc-status': '0', 'X-Accel-Buffering': 'no', 'Cache-Control': 'no-store'};
+const handleGrpcPost = async (request, reader, buffer, used) => {
+    const state = {tcpWriter: null, tcpSocket: null};
+    let close = () => {};
+    return new Response(new ReadableStream({
+        start(controller) {
+            close = () => {try {controller.close()} catch {}};
+            const writable = {
+                send: (chunk) => {
+                    const len = chunk.byteLength;
+                    let varintLen = 1;
+                    for (let v = len >>> 7; v; v >>>= 7) varintLen++;
+                    const totalPayloadLen = 1 + varintLen + len;
+                    const grpcFrame = new Uint8Array(5 + totalPayloadLen);
+                    grpcFrame[0] = 0;
+                    grpcFrame[1] = totalPayloadLen >>> 24;
+                    grpcFrame[2] = totalPayloadLen >>> 16;
+                    grpcFrame[3] = totalPayloadLen >>> 8;
+                    grpcFrame[4] = totalPayloadLen;
+                    grpcFrame[5] = 0x0A;
+                    let p = 6, v = len;
+                    while (v > 127) {
+                        grpcFrame[p++] = (v & 0x7F) | 0x80;
+                        v >>>= 7;
+                    }
+                    grpcFrame[p++] = v;
+                    grpcFrame.set(chunk, p);
+                    controller.enqueue(grpcFrame);
+                }
+            };
+            (async () => {
+                let grpcBuffer = new ArrayBuffer(73728), offset = 0;
+                if (used) new Uint8Array(grpcBuffer, 0, used).set(buffer);
+                while (true) {
+                    const bufToProcess = new Uint8Array(grpcBuffer, 0, used), bufLen = bufToProcess.byteLength;
+                    offset = 0;
+                    while (bufLen - offset >= 5) {
+                        const grpcLen = ((bufToProcess[offset + 1] << 24) >>> 0) | (bufToProcess[offset + 2] << 16) | (bufToProcess[offset + 3] << 8) | bufToProcess[offset + 4];
+                        const frameSize = 5 + grpcLen;
+                        if (bufLen - offset >= frameSize) {
+                            const grpcData = bufToProcess.subarray(offset + 5, offset + frameSize);
+                            offset += frameSize;
+                            let p = grpcData[0] === 0x0A ? 1 : 0;
+                            while (p && grpcData[p++] & 0x80) ;
+                            const payload = p === 0 ? grpcData : grpcData.subarray(p);
+                            state.tcpWriter ? await state.tcpWriter(payload) : await handleSession(payload, state, request, writable, close);
+                        } else {break}
+                    }
+                    if (offset < bufLen) {
+                        used = bufLen - offset;
+                        new Uint8Array(grpcBuffer).copyWithin(0, offset, bufLen);
+                    } else {used = 0}
+                    const {done, value} = await reader.read(new Uint8Array(grpcBuffer, used, 8192));
+                    if (done) break;
+                    grpcBuffer = value.buffer;
+                    used += value.byteLength;
+                }
+            })().catch(close);
+        }
+    }), {headers: grpcHeaders});
+};
+const handleXhttpPost = async (request, reader, xhttpBuffer, used) => {
+    const state = {tcpWriter: null, tcpSocket: null, needMore: false};
+    let close = () => {};
+    return new Response(new ReadableStream({
+        start(controller) {
+            close = () => {try {controller.close()} catch {}};
+            const writable = {send: (chunk) => controller.enqueue(chunk)};
+            (async () => {
+                while (true) {
+                    if (used > 0) {
+                        const payload = new Uint8Array(xhttpBuffer, 0, used);
+                        state.tcpWriter ? await state.tcpWriter(payload) : (state.needMore = false, await handleSession(payload, state, request, writable, close));
+                        if (!state.needMore) {
+                            used = 0;
+                            continue;
+                        }
+                    }
+                    const {done, value} = await reader.read(new Uint8Array(xhttpBuffer, used, used === 0 ? 8192 : 4096));
+                    if (done) break;
+                    xhttpBuffer = value.buffer;
+                    used += value.byteLength;
+                }
+            })().catch(close);
+        }
+    }), {headers: xhttpHeaders});
+};
+export default {
+    async fetch(request) {
+        if (request.method === 'POST' && request.headers.get('content-type') === 'application/grpc-web') {
+            const reader = request.body?.getReader({mode: 'byob'});
+            if (!reader) return new Response(null, {status: 400});
+            let postBuffer = new ArrayBuffer(8192), used = 0, buffer = new Uint8Array();
+            while (buffer.length === 0 || (buffer[0] === 0 && buffer.length < 6)) {
+                const {done, value} = await reader.read(new Uint8Array(postBuffer, used, 4096));
+                if (done || !value?.byteLength) break;
+                postBuffer = value.buffer;
+                used += value.byteLength;
+                buffer = new Uint8Array(postBuffer, 0, used);
+            }
+            if (buffer.length === 0) {
+                reader.releaseLock();
+                return new Response(null, {status: 400});
+            }
+            const isGrpc = !request.headers.get('Referer') && buffer.length >= 6 && buffer[0] === 0 && buffer[5] === 0x0A;
+            return isGrpc ? handleGrpcPost(request, reader, buffer, used) : handleXhttpPost(request, reader, postBuffer, used);
+        }
+        if (request.headers.get('Upgrade') === 'websocket') {
+            const {0: clientSocket, 1: webSocket} = new WebSocketPair();
+            // @ts-ignore
+            webSocket.accept({allowHalfOpen: true}), webSocket.binaryType = "arraybuffer";
+            handleWebSocketConn(webSocket, request);
+            return new Response(null, {status: 101, webSocket: clientSocket});
+        }
+        return new Response(html, {status: 200, headers: {'Content-Type': 'text/html; charset=UTF-8'}});
+    }
+};
